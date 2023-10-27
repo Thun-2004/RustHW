@@ -176,74 +176,75 @@ fn test_shapes_003() {
     assert_eq!(output, EXPECTED_002);
 }
 
-//2.1
-// #[derive(Clone)]
-// enum Text {
-//     Plain(String),
-//     Repeated(Box<Text>, usize),
-//     Joined(Vec<Box<Text>>, String)
-// }
+// 2.1
+#[derive(Clone)]
+enum Text {
+    Plain(String),
+    Repeated(Box<Text>, usize),
+    Joined(Vec<Box<Text>>, String)
+}
 
-// impl Text {
-//     fn value(&self) -> String {
-//         match self {
-//             Text::Plain(t) => t.clone(),
-//             Text::Repeated(elem, n) => {
-//                 elem.value().repeat(*n)
-//             }
-//             Text::Joined(data, sep) => {
-//                 let result = data.iter().map(|t| t.value()).collect::<Vec<_>>().join(sep);
-//                 result
-//             }
-//         }
-//     }
-// }
+impl Text {
+    fn value(&self) -> String {
+        match self {
+            Text::Plain(t) => t.clone(),
+            Text::Repeated(elem, n) => {
+                elem.value().repeat(*n)
+            }
+            Text::Joined(data, sep) => {
+                let result = data.iter().map(|t| t.value()).collect::<Vec<_>>().join(sep);
+                result
+            }
+        }
+    }
+}
 
-// impl From<&Text> for Box<Text> {
-//     fn from(t: &Text) -> Box<Text> {
-//         Box::new(t.clone()) 
-//     }
-// }
+impl From<&Text> for Box<Text> {
+    fn from(t: &Text) -> Box<Text> {
+        Box::new(t.clone()) 
+    }
+}
 
-// impl AsRef<Text> for Text {
-//     fn as_ref(&self) -> &Text { &self }
-// }
+impl AsRef<Text> for Text {
+    fn as_ref(&self) -> &Text { &self }
+}
 
-// impl Into<String> for Text{
-//     fn into(self) -> String{
-//         self.value()
-//     }
-// }
+impl Into<String> for Text{
+    fn into(self) -> String{
+        self.value()
+    }
+}
 
-// #[test]
-// fn test_text_repeated() {
-//     let t1 = Text::Plain("Hi".into());
-//     let t2 = Text::Plain("[+]".into());
-//     let t3 = Text::Repeated(t2.as_ref().into(), 3);
-//     let t4 = Text::Repeated(t3.as_ref().into(), 5);
-//     assert_eq!(t1.value(), "Hi");
-//     assert_eq!(t2.value(), "[+]");
-//     assert_eq!(t3.value(), "[+]".repeat(3));
-//     assert_eq!(t4.value(), "[+]".repeat(15));
-// }
+#[test]
+fn test_text_repeated() {
+    let t1 = Text::Plain("Hi".into());
+    let t2 = Text::Plain("[+]".into());
+    let t3 = Text::Repeated(t2.as_ref().into(), 3);
+    let t4 = Text::Repeated(t3.as_ref().into(), 5);
+    assert_eq!(t1.value(), "Hi");
+    assert_eq!(t2.value(), "[+]");
+    assert_eq!(t3.value(), "[+]".repeat(3));
+    assert_eq!(t4.value(), "[+]".repeat(15));
+}
 
-// #[test]
-// fn test_text_composition() {
-//     let t1 = Text::Plain("x|x".into());
-//     let t2 = Text::Plain("[+]".into());
-//     let t3 = Text::Repeated(t2.as_ref().into(), 3);
-//     let t4 = Text::Repeated(t3.as_ref().into(), 5);
-//     let mut tvec: Vec<Box<Text>> = Vec::new();
-//     tvec.push(t1.into());
-//     tvec.push(t2.into());
-//     tvec.push(t3.into());
-//     tvec.push(t4.into());
-//     let t5 = Text::Plain("--".into());
-//     let t6 = Text::Joined(tvec, t5.into());
-//     let ptn = ["x|x", "[+]", &"[+]".repeat(3), &"[+]".repeat(15)];
-//     let expected = ptn.join("--");
-//     assert_eq!(t6.value(), expected);
-// }
+#[test]
+fn test_text_composition() {
+    let t1 = Text::Plain("x|x".into());
+    let t2 = Text::Plain("[+]".into());
+    let t3 = Text::Repeated(t2.as_ref().into(), 3);
+    let t4 = Text::Repeated(t3.as_ref().into(), 5);
+    let mut tvec: Vec<Box<Text>> = Vec::new();
+    tvec.push(t1.into());
+    tvec.push(t2.into());
+    tvec.push(t3.into());
+    tvec.push(t4.into());
+    let t5 = Text::Plain("--".into());
+    let t6 = Text::Joined(tvec, t5.into());
+    let ptn = ["x|x", "[+]", &"[+]".repeat(3), &"[+]".repeat(15)];
+    let expected = ptn.join("--");
+    assert_eq!(t6.value(), expected);
+}
+
 
 //2.2
 trait Texts {
@@ -323,43 +324,34 @@ impl Texts for RepeatedText {
 
 #[derive(Clone)]
 struct JoinedText{
-    data: Vec<String>, 
-    sep: String
+    data: Vec<Box<dyn Texts>>, 
+    sep: PlainText
 }
 
-impl JoinedText{
-    fn with_parts<T: Into<Box<dyn Texts>>>(data: &[Box<dyn Texts>], sep: &PlainText) -> JoinedText{
-        JoinedText { 
-            data: data.iter().map(|t| t.value()).collect::<Vec<String>>(), 
-            sep: sep.value() 
-        }
+impl Texts for JoinedText {
+    fn value(&self) -> String {
+        self.data
+            .iter()
+            .map(|t| t.value())
+            .collect::<Vec<String>>()
+            .join(&self.sep.value())
     }
-}
 
-
-
-impl Texts for JoinedText{
-    fn value(&self) -> String{
-        // let result = self.data.iter().map(|t| t.value()).collect::<Vec<_>>().join(&self.sep);
-        let result = self.data.iter().cloned().collect::<Vec<String>>().join(&self.sep);
-        result
-    }
-    fn clone_box(&self) -> Box<dyn Texts>{
+    fn clone_box(&self) -> Box<dyn Texts> {
         Box::new(self.clone())
     }
 }
 
-impl AsRef<dyn Texts> for JoinedText {
-    fn as_ref(&self) -> &(dyn Texts + 'static) { 
-        self 
+
+impl JoinedText {
+    fn with_parts(data: &Vec<Box<dyn Texts>> , sep: &PlainText) -> JoinedText{
+        JoinedText {
+            data: data.to_vec(),
+            sep: sep.clone(),
+        }
     }
 }
 
-impl From<&JoinedText> for Box<dyn Texts> {
-    fn from(t: &JoinedText) -> Box<dyn Texts> {
-        Box::new(t.clone()) 
-    }
-}
 
 #[test]
 fn test_text_repeated2() {
@@ -390,4 +382,5 @@ fn test_text_composition2() {
     let expected = ptn.join("--");
     assert_eq!(t6.value(), expected);
 }
+
 
